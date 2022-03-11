@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    printf("\n%20s\t%lu bytes\n", "L2 Packet size:", l2packetsize);
+    printf("\n%20s\t%lu bytes\n", "L2 packet size:", l2packetsize);
 
     // npd assumes that data within the L2 is always ipv4 data
     ipv4packet = ipv4_data_within_packet(packet_bytes + DATA_OFFSET, l3packetsize);

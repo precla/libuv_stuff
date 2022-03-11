@@ -38,7 +38,7 @@ void print_ipv4_data(char *ipv4packet, size_t size) {
 
     printf("\n%20s\t", "IPv4 source address:");
     print_ipv4_address(ipv4srcadr);
-    printf("\n%20s\t", "IPv4 source address:");
+    printf("\n%20s\t", "IPv4 dest. address:");
     print_ipv4_address(ipv4destadr);
 }
 
