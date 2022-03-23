@@ -36,6 +36,7 @@ int main(int argc, char *argv[]) {
         assert(init_tcp_s(loop, &st) == 0);
         listen = uv_listen((uv_stream_t*)&st, MAX_CONNECTIONS, conn_tcp);
     } else if (usingProtocol == 1) {
+        // TODO: listen error throws invalid argument atm for udp
         assert(uv_udp_init(loop, &su) == 0);
         listen = uv_listen((uv_stream_t*)&su, MAX_CONNECTIONS, conn_udp);
     }
