@@ -9,9 +9,16 @@
 #include "server.h"
 
 uv_loop_t *loop;
+uv_timer_t timer;
+
+write_req_t *req;
+uv_stream_t *uvstrm;
+uv_buf_t *bufmsg;
+
 struct sockaddr_in addr;
 users userlist[MAX_USERS];
 unsigned short usercount = 0;
+
 
 int main(int argc, char *argv[]) {
     loop = uv_default_loop();
@@ -46,6 +53,7 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+    uv_timer_init(loop, &timer);
     uv_run(loop, UV_RUN_DEFAULT);
     uv_loop_close(loop);
     return 0;
@@ -92,88 +100,150 @@ void conn_udp(uv_stream_t* s, int status) {
 }
 
 void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
+    /*
+     * example messages
+     * n: Neo                   // registers user as Neo
+     * a: hello                 // sends message "hello" to everyone
+     * _t30: coffee?            // sends message "coffee?" to everyone in 30 seconds, whereas t20 would be 20 seconds
+     * Trinity blue or red      // sends message "blue or red" to user with nick Trinity
+     */
     if (nread > 0) {
-        write_req_t *req = (write_req_t*)malloc(sizeof(write_req_t));
+        req = (write_req_t*)malloc(sizeof(write_req_t));
         req->buf = uv_buf_init(buf->base, nread);
+        char *msg = req->buf.base;
+        int msgop = -1;
+        unsigned int delay = 0;
 
-        // check if user is setting nickname for chatroom
-        char *nick = strstr(buf->base, "n: ");
-        char *all = strstr(buf->base, "a: ");
-        if (nick) {
-            // move by 3 chars: 'n: '
-            nick += 3;
-            if (usercount < MAX_USERS) {
-                // add nick to userlist[] if it doesn't already exist
-                for (int i = 0; i < usercount; i++) {
-                    // do not allow double nick usage
-                    if (client == userlist[i].stream) {
-                        fprintf(stdout, "user %s has already a nick\n", userlist[i].nick);
-                        uv_buf_t response = uv_buf_init("    you already have a nick!\n", 28);
-                        uv_write((uv_write_t*)req, client, &response, 1, msg_write);
-                        return;
-                    }
+        // latest libuv has thread-safe uv__strtok
+        if (!strncmp(msg, "n:", 2)) {
+            msg = strtok(msg, " ");
+            msgop = NICKREG;
 
-                    if (!strcmp(userlist[i].nick, nick)) {
-                        fprintf(stdout, "%s - nick exists already, impostor?\n", nick);
-                        uv_buf_t response = uv_buf_init("    nick exists already, try something else\n", 44);
-                        uv_write((uv_write_t*)req, client, &response, 1, msg_write);
-                        nick = NULL;
-                    }
-                }
-                if (nick) {
-                    strncpy(userlist[usercount].nick, nick, NICK_LENGTH);
-                    userlist[usercount].stream = client;
-                    fprintf(stdout, "new nick registered: %s", userlist[usercount].nick);
-                    uv_buf_t response = uv_buf_init("    nick registered\n", 20);
-                    uv_write((uv_write_t*)req, client, &response, 1, msg_write);
-                    usercount++;
-                }
+        } else if (!strncmp(msg, "a:", 2)) {
+            msg = strstr(req->buf.base, ": ") + 2;
+            msgop = ALL;
 
-            } else {
-                fprintf(stdout, "user limit reached\n");
-                uv_buf_t response = uv_buf_init("    user limit reached, come back later\n", 40);
-                uv_write((uv_write_t*)req, client, &response, 1, msg_write);
-            }
-
-        } else if (all) {
-            // send message to everyone, except the sender
-            fprintf(stdout, "sending following message to everyone:\n%s", req->buf.base + 3);
-            for (int i = 0; i < usercount; i++) {
-                if (client != userlist[i].stream) {
-                    uv_write((uv_write_t*)req, userlist[i].stream, &req->buf, 1, msg_write);
-                    req->req.type = UV_UNKNOWN_REQ;
-                }
-            }
+        } else if (!strncmp(msg, "_t", 2)) {
+            delay = atoi(msg + 2);
+            msg = strstr(req->buf.base, ": ") + 2;
+            msgop = ALL_DELAY;
 
         } else {
-            char destnick[NICK_LENGTH];
-            int i = 0;
-
-            strncpy(destnick, req->buf.base, (size_t)(strstr(req->buf.base, ":") - req->buf.base));
-
-            for (i = 0; i < usercount; i++) {
-                if (!strncmp(destnick, userlist[i].nick, strlen(destnick))) {
-                    // if nick found, send msg to that user
-                    uv_write((uv_write_t*)req, userlist[i].stream, &req->buf, 1, msg_write);
-                    break;
-                }
-            }
-            if (i >= usercount) {
-                fprintf(stdout, "%s - nick does not exist\n", destnick);
-                uv_buf_t response = uv_buf_init("    nick does not exist\n", 24);
-                uv_write((uv_write_t*)req, client, &response, 1, msg_write);
-            }
+            msg = strstr(req->buf.base, ":") + 2;
+            msgop = NICK;
         }
-        return;
-    }
 
-    if (nread < 0) {
+        // check if user is setting nickname for chatroom
+        switch (msgop) {
+            case -1:
+                break;
+            case NICKREG:
+                // move by 3 chars: 'n: '
+                msg += 3;
+                if (usercount < MAX_USERS) {
+                    // add nick to userlist[] if it doesn't already exist
+                    for (int i = 0; i < usercount; i++) {
+                        // do not allow double nick usage
+                        if (client == userlist[i].stream) {
+                            fprintf(stdout, "user %s has already a nick\n", userlist[i].nick);
+                            uv_buf_t response = uv_buf_init("    you already have a nick!\n", 28);
+                            prepare_message(client, &response);
+                            send_message();
+                            return;
+                        }
+
+                        if (!strcmp(userlist[i].nick, msg)) {
+                            fprintf(stdout, "%s - nick exists already, impostor?\n", msg);
+                            uv_buf_t response = uv_buf_init("    nick exists already, try something else\n", 44);
+                            prepare_message(client, &response);
+                            send_message();
+                            msg = NULL;
+                        }
+                    }
+                    if (msg) {
+                        strncpy(userlist[usercount].nick, msg, NICK_LENGTH);
+                        userlist[usercount].stream = client;
+                        fprintf(stdout, "new nick registered: %s", userlist[usercount].nick);
+                        uv_buf_t response = uv_buf_init("    nick registered\n", 20);
+                        prepare_message(client, &response);
+                        send_message();
+                        usercount++;
+                    }
+
+                } else {
+                    fprintf(stdout, "user limit reached\n");
+                    uv_buf_t response = uv_buf_init("    user limit reached, come back later\n", 40);
+                    prepare_message(client, &response);
+                    send_message();
+                }
+                break;
+
+            case ALL:
+            case ALL_DELAY:
+                // send message to everyone, except the sender
+                fprintf(stdout, "sending following message to everyone:\n%s", msg);
+                strcpy(req->buf.base, msg);
+
+                for (int i = 0; i < usercount; i++) {
+                    if (client != userlist[i].stream) {
+                        prepare_message(userlist[i].stream, &req->buf);
+                        if (msgop == ALL_DELAY) {
+                            uv_timer_start(&timer, timed_message, delay * 1000, 0);
+                        } else {
+                            send_message();
+                        }
+                        req->req.type = UV_UNKNOWN_REQ;
+                    }
+                }
+                break;
+
+            case NICK:
+                char destnick[NICK_LENGTH];
+                int i = 0;
+
+                strncpy(destnick, msg, strlen(msg));
+
+                for (i = 0; i < usercount; i++) {
+                    if (!strncmp(destnick, userlist[i].nick, strlen(destnick))) {
+                        prepare_message(userlist[i].stream, &req->buf);
+                        send_message();
+                        break;
+                    }
+                }
+                if (i >= usercount) {
+                    fprintf(stdout, "%s - nick does not exist\n", destnick);
+                    uv_buf_t response = uv_buf_init("    nick does not exist\n", 24);
+                    prepare_message(userlist[i].stream, &response);
+                    send_message();
+                }
+                break;
+
+            default:
+                break;
+        }
+
+        return;
+    } else if (nread < 0) {
         if (nread != UV_EOF)
             fprintf(stderr, "Read error %s\n", uv_err_name(nread));
         uv_close((uv_handle_t*) client, on_close);
     }
 
     free(buf->base);
+}
+
+void timed_message(uv_timer_t *handle) {
+    send_message();
+    uv_timer_stop(&timer);
+}
+
+void prepare_message(uv_stream_t *s, uv_buf_t *msg) {
+    uvstrm = s;
+    bufmsg = msg;
+}
+
+void send_message() {
+    uv_write((uv_write_t*)req, uvstrm, bufmsg, 1, msg_write);
 }
 
 // stuff from libuv/docs/code/tcp-echo-server/main.c :
