@@ -151,7 +151,7 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
                             return;
                         }
 
-                        if (!strcmp(userlist[i].nick, msg)) {
+                        if (!strncmp(userlist[i].nick, msg, NICK_LENGTH)) {
                             fprintf(stdout, "%s - nick exists already, impostor?\n", msg);
                             uv_buf_t response = uv_buf_init("    nick exists already, try something else\n", 44);
                             prepare_message(client, &response);
