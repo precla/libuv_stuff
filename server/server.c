@@ -129,7 +129,6 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
             msgop = ALL_DELAY;
 
         } else {
-            msg = strstr(req->buf.base, ":") + 2;
             msgop = NICK;
         }
 
@@ -197,10 +196,8 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
                 break;
 
             case NICK:
-                char destnick[NICK_LENGTH];
+                char *destnick = strtok(msg, " ");
                 int i = 0;
-
-                strncpy(destnick, msg, strlen(msg));
 
                 for (i = 0; i < usercount; i++) {
                     if (!strncmp(destnick, userlist[i].nick, strlen(destnick))) {
