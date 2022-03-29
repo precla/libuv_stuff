@@ -212,7 +212,7 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
                 if (i >= usercount) {
                     fprintf(stdout, "%s - nick does not exist\n", destnick);
                     uv_buf_t response = uv_buf_init("    nick does not exist\n", 24);
-                    prepare_message(userlist[i].stream, &response);
+                    prepare_message(client, &response);
                     send_message();
                 }
                 break;
