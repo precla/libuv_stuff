@@ -183,6 +183,7 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
                 if (msgop == ALL) {
                     fprintf(stdout, "sending following message to everyone:\n%s", msg);
                 } else {
+                    // TODO: sending to everyone is not working, only sending to one
                     fprintf(stdout, "sending following timed message to everyone:\n%s", msg);
                 }
 
