@@ -244,7 +244,7 @@ void send_message() {
 
 // stuff from libuv/docs/code/tcp-echo-server/main.c :
 void set_buffer(uv_handle_t *handle, size_t size, uv_buf_t *buf) {
-    buf->base = (char*)malloc(size);
+    buf->base = calloc(size, sizeof(char*));
     buf->len = size;
 }
 
