@@ -182,7 +182,6 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
             case ALL_DELAY:
                 // send message to everyone, except the sender
                 fprintf(stdout, "sending following message to everyone:\n%s", msg);
-                strcpy(req->buf.base, msg);
 
                 for (int i = 0; i < usercount; i++) {
                     if (client != userlist[i].stream) {
