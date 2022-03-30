@@ -4,4 +4,4 @@ set(C_STANDARD 11)
 
 add_executable(uvs server.c)
 target_link_libraries(uvs uv)
-target_compile_options(uvs PRIVATE -fno-strict-aliasing)
+target_compile_options(uvs PRIVATE -fno-strict-aliasing -Wall)
