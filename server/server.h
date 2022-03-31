@@ -41,3 +41,4 @@ void set_buffer(uv_handle_t *handle, size_t size, uv_buf_t *buf);
 void msg_write(uv_write_t *req, int status);
 void on_close(uv_handle_t* handle);
 void free_write_req(uv_write_t *req);
+void freeall();

@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
         listen = uv_listen((uv_stream_t*)&st, MAX_CONNECTIONS, conn_tcp);
     } else if (usingProtocol == 1) {
         // TODO: listen error throws invalid argument atm for udp
-        assert(uv_udp_init(loop, &su) == 0);
+        assert(init_udp_s(loop, &su) == 0);
         listen = uv_listen((uv_stream_t*)&su, MAX_CONNECTIONS, conn_udp);
     }
 
@@ -56,6 +56,7 @@ int main(int argc, char *argv[]) {
     uv_timer_init(loop, &timer);
     uv_run(loop, UV_RUN_DEFAULT);
     uv_loop_close(loop);
+    freeall();
     return 0;
 }
 
@@ -268,4 +269,12 @@ void free_write_req(uv_write_t *req) {
     write_req_t *wr = (write_req_t*) req;
     free(wr->buf.base);
     free(wr);
+}
+
+
+void freeall() {
+    free(loop);
+    free(req);
+    free(uvstrm);
+    free(bufmsg);
 }
