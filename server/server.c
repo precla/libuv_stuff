@@ -181,24 +181,19 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
             case ALL:
             case ALL_DELAY:
                 // send message to everyone, except the sender
-                if (msgop == ALL) {
-                    fprintf(stdout, "sending following message to everyone:\n%s", msg);
-                } else {
-                    // TODO: sending to everyone is working, but program crashes after everyone got their msg
-                    fprintf(stdout, "sending following timed message to everyone:\n%s", msg);
+                // TODO: sending to everyone is working, but program crashes after everyone got their msg
+                for(int i = 0; i < usercount; i++) {
+                    userlist[i].buf = uv_buf_init(req->buf.base, req->buf.len);
                 }
 
-                for (int i = 0; i < usercount; i++) {
-                    if (client != userlist[i].stream) {
-                        prepare_message(userlist[i].stream, &req->buf);
-                        if (msgop == ALL_DELAY) {
-                            uv_timer_start(&timer, timed_message, delay * 1000, 0);
-                        } else {
-                            send_message();
-                        }
-                        req->req.type = UV_UNKNOWN_REQ;
-                    }
+                if (msgop == ALL) {
+                    fprintf(stdout, "sending following message to everyone:\n%s", msg);
+                    mass_message(&timer);
+                } else if (msgop == ALL_DELAY) {
+                    fprintf(stdout, "sending following timed message to everyone:\n%s", msg);
+                    uv_timer_start(&timer, mass_message, delay * 1000, 0);
                 }
+
                 break;
 
             case NICK:
@@ -234,9 +229,11 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
     free(buf->base);
 }
 
-void timed_message(uv_timer_t *handle) {
-    send_message();
-    uv_timer_stop(&timer);
+void mass_message(uv_timer_t *handle) {
+    for (int i = 0; i < usercount; i++) {
+        send_message_no_prep(userlist[i].stream, &userlist[i].buf);
+    }
+    uv_timer_stop(handle);
 }
 
 void prepare_message(uv_stream_t *s, uv_buf_t *msg) {
@@ -246,6 +243,10 @@ void prepare_message(uv_stream_t *s, uv_buf_t *msg) {
 
 void send_message() {
     uv_write((uv_write_t*)req, uvstrm, bufmsg, 1, msg_write);
+}
+
+void send_message_no_prep(uv_stream_t *s, uv_buf_t *msg) {
+    uv_write((uv_write_t*)req, s, msg, 1, msg_write);
 }
 
 // stuff from libuv/docs/code/tcp-echo-server/main.c :
