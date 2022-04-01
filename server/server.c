@@ -19,7 +19,6 @@ struct sockaddr_in addr;
 users userlist[MAX_USERS];
 unsigned short usercount = 0;
 
-
 int main(int argc, char *argv[]) {
     loop = uv_default_loop();
     assert(loop != NULL);
@@ -51,6 +50,11 @@ int main(int argc, char *argv[]) {
     if (listen) {
         fprintf(stderr, "listen error: %s\n", uv_strerror(listen));
         return EXIT_FAILURE;
+    }
+
+    // prepare userlist
+    for (int i = 0; i < MAX_USERS; i++) {
+        userlist[i].msg = calloc(256, sizeof(char));
     }
 
     uv_timer_init(loop, &timer);
@@ -183,7 +187,8 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
                 // send message to everyone, except the sender
                 // TODO: sending to everyone is working, but program crashes after everyone got their msg
                 for(int i = 0; i < usercount; i++) {
-                    userlist[i].buf = uv_buf_init(req->buf.base, req->buf.len);
+                    strncpy(userlist[i].msg, req->buf.base, 256);
+                    uv_buf_init(userlist[i].msg, strlen(userlist[i].msg));
                 }
 
                 if (msgop == ALL) {
@@ -231,7 +236,7 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
 
 void mass_message(uv_timer_t *handle) {
     for (int i = 0; i < usercount; i++) {
-        send_message_no_prep(userlist[i].stream, &userlist[i].buf);
+        send_message_no_prep(userlist[i].stream, userlist[i].buf);
     }
     uv_timer_stop(handle);
 }
@@ -278,4 +283,7 @@ void freeall() {
     free(req);
     free(uvstrm);
     free(bufmsg);
+    for (int i = 0; i < MAX_USERS; i++) {
+        free(userlist[i].msg);
+    }
 }

@@ -26,8 +26,9 @@ typedef struct {
 
 typedef struct {
     char nick[NICK_LENGTH];
+    char *msg;
     uv_stream_t *stream;
-    uv_buf_t buf;
+    uv_buf_t *buf;
 } users;
 
 int init_tcp_s(uv_loop_t *loop, uv_tcp_t *s);
