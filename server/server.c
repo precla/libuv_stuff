@@ -34,8 +34,6 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    wrt = (write_req_t*)malloc(sizeof(write_req_t));
-
     uv_timer_init(loop, &timer);
     uv_run(loop, UV_RUN_DEFAULT);
     uv_loop_close(loop);
@@ -72,6 +70,7 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
      * Trinity blue or red      // sends message "blue or red" to user with nick Trinity
      */
     if (nread > 0) {
+        wrt = (write_req_t*)malloc(sizeof(write_req_t));
         wrt->buf = uv_buf_init(buf->base, nread);
         char *msg = wrt->buf.base;
         int msgop = -1;
@@ -146,8 +145,7 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
 
             case ALL:
             case ALL_DELAY:
-                // send message to everyone, except the sender
-                // TODO: sending to everyone is working, but program crashes after everyone got their msg
+                // send message to everyone
                 for(int i = 0; i < usercount; i++) {
                     if (userlist[i].stream != NULL) {
                         userlist[i].buf = uv_buf_init(msg, strlen(msg));
@@ -203,13 +201,11 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
 }
 
 void message_all(uv_timer_t *handle) {
-    write_req_t *wrt_l[usercount];
-
     for (int i = 0; i < usercount; i++) {
         if (userlist[i].stream != NULL) {
-            wrt_l[i] = (write_req_t*)malloc(sizeof(write_req_t));
-            wrt_l[i]->buf = uv_buf_init(userlist[i].buf.base, userlist[i].buf.len);
-            send_message_no_prep(wrt_l[i], userlist[i].stream, &userlist[i].buf);
+            write_req_t *wrt_l = (write_req_t*)malloc(sizeof(write_req_t));
+            wrt_l->buf = uv_buf_init(userlist[i].buf.base, userlist[i].buf.len);
+            send_message_no_prep(wrt_l, userlist[i].stream, &userlist[i].buf);
         }
     }
 
