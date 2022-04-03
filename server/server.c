@@ -151,9 +151,10 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
                 for(int i = 0; i < usercount; i++) {
                     if (userlist[i].stream != NULL) {
                         userlist[i].buf = uv_buf_init(msg, strlen(msg));
+                        userlist[i].buf.base = (char *)malloc(strlen(msg) + 2);
+                        strncpy(userlist[i].buf.base, msg, strlen(msg));
+                        strcat(userlist[i].buf.base, "\n");
                     }
-
-
                 }
 
                 if (msgop == ALL) {
@@ -202,11 +203,16 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
 }
 
 void message_all(uv_timer_t *handle) {
+    write_req_t *wrt_l[usercount];
+
     for (int i = 0; i < usercount; i++) {
         if (userlist[i].stream != NULL) {
-            send_message_no_prep(userlist[i].stream, &userlist[i].buf);
+            wrt_l[i] = (write_req_t*)malloc(sizeof(write_req_t));
+            wrt_l[i]->buf = uv_buf_init(userlist[i].buf.base, userlist[i].buf.len);
+            send_message_no_prep(wrt_l[i], userlist[i].stream, &userlist[i].buf);
         }
     }
+
     uv_timer_stop(handle);
 }
 
@@ -219,8 +225,8 @@ void send_message() {
     uv_write(&wrt->req, uvstrm, bufmsg, 1, msg_write);
 }
 
-void send_message_no_prep(uv_stream_t *s, uv_buf_t *msg) {
-    uv_write((uv_write_t*)wrt, s, msg, 1, msg_write);
+void send_message_no_prep(write_req_t *wrt_l, uv_stream_t *s, uv_buf_t *msg) {
+    uv_write((uv_write_t*)wrt_l, s, msg, 1, msg_write);
 }
 
 // stuff from libuv/docs/code/tcp-echo-server/main.c :
