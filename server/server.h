@@ -26,17 +26,14 @@ typedef struct {
 
 typedef struct {
     char nick[NICK_LENGTH];
-    char *msg;
     uv_stream_t *stream;
-    uv_buf_t *buf;
-} users;
+    uv_buf_t buf;
+} user;
 
 int init_tcp_s(uv_loop_t *loop, uv_tcp_t *s);
-int init_udp_s(uv_loop_t *loop, uv_udp_t *s);
 void conn_tcp(uv_stream_t *s, int status);
-void conn_udp(uv_stream_t *s, int status);
 void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf);
-void mass_message(uv_timer_t *handle);
+void message_all(uv_timer_t *handle);
 void prepare_message(uv_stream_t *s, uv_buf_t *msg);
 void send_message();
 void send_message_no_prep(uv_stream_t *s, uv_buf_t *msg);

@@ -1,6 +1,6 @@
 /*
  * server using libuv
- * listens to clients on port 54545
+ * listens to clients on port 54545, tcp
  * and exchanges their messages
  * basically an irc server, but much simpler
  * connect to server using telnet
@@ -11,12 +11,12 @@
 uv_loop_t *loop;
 uv_timer_t timer;
 
-write_req_t *req;
+write_req_t *wrt;
 uv_stream_t *uvstrm;
 uv_buf_t *bufmsg;
 
 struct sockaddr_in addr;
-users userlist[MAX_USERS];
+user userlist[MAX_USERS];
 unsigned short usercount = 0;
 
 int main(int argc, char *argv[]) {
@@ -24,38 +24,17 @@ int main(int argc, char *argv[]) {
     assert(loop != NULL);
 
     uv_tcp_t st;
-    uv_udp_t su;
     int listen;
 
-    /*
-     * 0 - TCP (defaults to TCP)
-     * 1 - UDP
-     */
-    int usingProtocol = 0;
-
-    if (argc > 1 && !strcmp(argv[1], "udp")) {
-        fprintf(stdout, "using udp\n");
-        usingProtocol = 1;
-    }
-
-    if (usingProtocol == 0) {
-        assert(init_tcp_s(loop, &st) == 0);
-        listen = uv_listen((uv_stream_t*)&st, MAX_CONNECTIONS, conn_tcp);
-    } else if (usingProtocol == 1) {
-        // TODO: listen error throws invalid argument atm for udp
-        assert(init_udp_s(loop, &su) == 0);
-        listen = uv_listen((uv_stream_t*)&su, MAX_CONNECTIONS, conn_udp);
-    }
+    assert(init_tcp_s(loop, &st) == 0);
+    listen = uv_listen((uv_stream_t*)&st, MAX_CONNECTIONS, conn_tcp);
 
     if (listen) {
         fprintf(stderr, "listen error: %s\n", uv_strerror(listen));
         return EXIT_FAILURE;
     }
 
-    // prepare userlist
-    for (int i = 0; i < MAX_USERS; i++) {
-        userlist[i].msg = calloc(256, sizeof(char));
-    }
+    wrt = (write_req_t*)malloc(sizeof(write_req_t));
 
     uv_timer_init(loop, &timer);
     uv_run(loop, UV_RUN_DEFAULT);
@@ -66,10 +45,6 @@ int main(int argc, char *argv[]) {
 
 int init_tcp_s(uv_loop_t *loop, uv_tcp_t *s) {
     return uv_tcp_init(loop, s) | uv_ip4_addr("0.0.0.0", LISTEN_PORT, &addr) | uv_tcp_bind(s, (const struct sockaddr*)&addr, 0);
-}
-
-int init_udp_s(uv_loop_t* loop, uv_udp_t* s) {
-    return uv_udp_init(loop, s) | uv_ip4_addr("0.0.0.0", LISTEN_PORT, &addr) | uv_udp_bind(s, (const struct sockaddr*)&addr, 0);
 }
 
 void conn_tcp(uv_stream_t* s, int status) {
@@ -88,22 +63,6 @@ void conn_tcp(uv_stream_t* s, int status) {
     }
 }
 
-void conn_udp(uv_stream_t* s, int status) {
-    fprintf(stdout, "new udp connection incoming...\n");
-    if (status < 0) {
-        fprintf(stderr, "error with setting up new connections %s\n", uv_strerror(status));
-        return;
-    }
-    uv_udp_t *connect = (uv_udp_t*)malloc(sizeof(uv_udp_t));
-    if (uv_udp_init(loop, connect)) {
-        fprintf(stderr ,"error with uv_udp_init, within cb_conn_udp\n");
-        return;
-    }
-    if (uv_accept(s, (uv_stream_t*)connect) == 0) {
-        uv_read_start((uv_stream_t*)connect, set_buffer, read_msg);
-    }
-}
-
 void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
     /*
      * example messages
@@ -113,9 +72,8 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
      * Trinity blue or red      // sends message "blue or red" to user with nick Trinity
      */
     if (nread > 0) {
-        req = (write_req_t*)malloc(sizeof(write_req_t));
-        req->buf = uv_buf_init(buf->base, nread);
-        char *msg = req->buf.base;
+        wrt->buf = uv_buf_init(buf->base, nread);
+        char *msg = wrt->buf.base;
         int msgop = -1;
         unsigned int delay = 0;
 
@@ -125,16 +83,20 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
             msgop = NICKREG;
 
         } else if (!strncmp(msg, "a:", 2)) {
-            msg = strstr(req->buf.base, ": ") + 2;
+            msg = strstr(msg, ": ") + 2;
             msgop = ALL;
 
         } else if (!strncmp(msg, "_t", 2)) {
             delay = atoi(msg + 2);
-            msg = strstr(req->buf.base, ": ") + 2;
+            msg = strstr(msg, ": ") + 2;
             msgop = ALL_DELAY;
 
         } else {
             msgop = NICK;
+        }
+
+        if (msg == NULL) {
+            msgop = -1;
         }
 
         // check if user is setting nickname for chatroom
@@ -187,27 +149,31 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
                 // send message to everyone, except the sender
                 // TODO: sending to everyone is working, but program crashes after everyone got their msg
                 for(int i = 0; i < usercount; i++) {
-                    strncpy(userlist[i].msg, req->buf.base, 256);
-                    uv_buf_init(userlist[i].msg, strlen(userlist[i].msg));
+                    if (userlist[i].stream != NULL) {
+                        userlist[i].buf = uv_buf_init(msg, strlen(msg));
+                    }
+
+
                 }
 
                 if (msgop == ALL) {
                     fprintf(stdout, "sending following message to everyone:\n%s", msg);
-                    mass_message(&timer);
+                    message_all(&timer);
                 } else if (msgop == ALL_DELAY) {
                     fprintf(stdout, "sending following timed message to everyone:\n%s", msg);
-                    uv_timer_start(&timer, mass_message, delay * 1000, 0);
+                    uv_timer_start(&timer, message_all, delay * 1000, 0);
                 }
 
                 break;
 
             case NICK:
                 char *destnick = strtok(msg, " ");
+                int destnicklen = strlen(destnick);
                 int i = 0;
 
                 for (i = 0; i < usercount; i++) {
-                    if (!strncmp(destnick, userlist[i].nick, strlen(destnick))) {
-                        prepare_message(userlist[i].stream, &req->buf);
+                    if (!strncmp(destnick, userlist[i].nick, destnicklen)) {
+                        prepare_message(userlist[i].stream, &wrt->buf);
                         send_message();
                         break;
                     }
@@ -226,17 +192,20 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
 
         return;
     } else if (nread < 0) {
-        if (nread != UV_EOF)
+        if (nread != UV_EOF) {
             fprintf(stderr, "Read error %s\n", uv_err_name(nread));
+        }
         uv_close((uv_handle_t*) client, on_close);
     }
 
     free(buf->base);
 }
 
-void mass_message(uv_timer_t *handle) {
+void message_all(uv_timer_t *handle) {
     for (int i = 0; i < usercount; i++) {
-        send_message_no_prep(userlist[i].stream, userlist[i].buf);
+        if (userlist[i].stream != NULL) {
+            send_message_no_prep(userlist[i].stream, &userlist[i].buf);
+        }
     }
     uv_timer_stop(handle);
 }
@@ -247,11 +216,11 @@ void prepare_message(uv_stream_t *s, uv_buf_t *msg) {
 }
 
 void send_message() {
-    uv_write((uv_write_t*)req, uvstrm, bufmsg, 1, msg_write);
+    uv_write(&wrt->req, uvstrm, bufmsg, 1, msg_write);
 }
 
 void send_message_no_prep(uv_stream_t *s, uv_buf_t *msg) {
-    uv_write((uv_write_t*)req, s, msg, 1, msg_write);
+    uv_write((uv_write_t*)wrt, s, msg, 1, msg_write);
 }
 
 // stuff from libuv/docs/code/tcp-echo-server/main.c :
@@ -272,18 +241,14 @@ void on_close(uv_handle_t* handle) {
 }
 
 void free_write_req(uv_write_t *req) {
-    write_req_t *wr = (write_req_t*) req;
+    write_req_t *wr = (write_req_t*)req;
     free(wr->buf.base);
     free(wr);
 }
 
-
 void freeall() {
     free(loop);
-    free(req);
+    free(wrt);
     free(uvstrm);
     free(bufmsg);
-    for (int i = 0; i < MAX_USERS; i++) {
-        free(userlist[i].msg);
-    }
 }
