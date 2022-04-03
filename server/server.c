@@ -13,7 +13,7 @@ uv_timer_t timer;
 
 write_req_t *wrt;
 uv_stream_t *uvstrm;
-uv_tcp_t *tcpconn;
+uv_tcp_t *tcpconn[MAX_USERS];
 uv_buf_t *bufmsg;
 
 struct sockaddr_in addr;
@@ -69,17 +69,17 @@ void conn_tcp(uv_stream_t* s, int status) {
         fprintf(stderr, "error with setting up new connections %s\n", uv_strerror(status));
         return;
     }
-    tcpconn = (uv_tcp_t*)malloc(sizeof(uv_tcp_t));
-    if (tcpconn == NULL) {
+    tcpconn[usercount] = (uv_tcp_t*)malloc(sizeof(uv_tcp_t));
+    if (tcpconn[usercount] == NULL) {
         fprintf(stderr, "error with malloc for uv_tcp_t *tcpconn\n");
         return;
     }
-    if (uv_tcp_init(loop, tcpconn)) {
+    if (uv_tcp_init(loop, tcpconn[usercount])) {
         fprintf(stderr ,"error with uv_tcp_init, within cb_conn_tcp\n");
         return;
     }
-    if (uv_accept(s, (uv_stream_t*)tcpconn) == 0) {
-        uv_read_start((uv_stream_t*)tcpconn, set_buffer, read_msg);
+    if (uv_accept(s, (uv_stream_t*)tcpconn[usercount]) == 0) {
+        uv_read_start((uv_stream_t*)tcpconn[usercount], set_buffer, read_msg);
     }
 }
 
@@ -92,6 +92,9 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
      * Trinity blue or red      // sends message "blue or red" to user with nick Trinity
      */
     if (nread > 0) {
+        int msgop = -1;
+        unsigned int delay = 0;
+
         wrt = (write_req_t*)malloc(sizeof(write_req_t));
         if (wrt == NULL) {
             fprintf(stderr ,"error with malloc for write_req_t *wrt\n");
@@ -109,8 +112,6 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
         memcpy(wrt->buf.base, buf->base, buf->len);
 
         char *msg = wrt->buf.base;
-        int msgop = -1;
-        unsigned int delay = 0;
 
         // latest libuv has thread-safe uv__strtok
         if (!strncmp(msg, "n:", 2)) {
@@ -303,9 +304,7 @@ void freeall() {
     free(loop);
     free(wrt);
     free(uvstrm);
-    free(tcpconn);
-    free(bufmsg);
     for (int i = 0; i < usercount; i++) {
-        free(userlist[i].buf.base);
+        free(tcpconn[i]);
     }
 }
