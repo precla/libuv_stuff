@@ -1,6 +1,8 @@
 #pragma once
 
 #include <assert.h>
+#include <setjmp.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,6 +41,7 @@ void send_message();
 void send_message_no_prep(write_req_t *wrt_l, uv_stream_t *s, uv_buf_t *msg);
 void set_buffer(uv_handle_t *handle, size_t size, uv_buf_t *buf);
 void msg_write(uv_write_t *req, int status);
+void signal_handler(uv_signal_t *handle, int signum);
 void on_close(uv_handle_t* handle);
 void free_write_req(uv_write_t *req);
 void freeall();

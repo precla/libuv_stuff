@@ -19,11 +19,20 @@ struct sockaddr_in addr;
 user userlist[MAX_USERS];
 unsigned short usercount = 0;
 
+jmp_buf jmp;
+
 int main(int argc, char *argv[]) {
+    loop = (uv_loop_t*)malloc(sizeof(uv_loop_t));
+    if (loop == NULL) {
+        fprintf(stderr, "malloc failure for uv_loop_t loop\n");
+        return EXIT_FAILURE;
+    }
+
     loop = uv_default_loop();
     assert(loop != NULL);
 
     uv_tcp_t st;
+    uv_signal_t sig;
     int listen;
 
     assert(init_tcp_s(loop, &st) == 0);
@@ -35,7 +44,15 @@ int main(int argc, char *argv[]) {
     }
 
     uv_timer_init(loop, &timer);
-    uv_run(loop, UV_RUN_DEFAULT);
+    uv_signal_init(loop, &sig);
+    uv_signal_start(&sig, signal_handler, SIGINT);
+
+    listen = setjmp(jmp);
+    if (!listen) {
+        uv_run(loop, UV_RUN_DEFAULT);
+    }
+
+    fprintf(stdout, "Closing uvs...\n");
     uv_loop_close(loop);
     freeall();
     return 0;
@@ -52,6 +69,10 @@ void conn_tcp(uv_stream_t* s, int status) {
         return;
     }
     uv_tcp_t *connect = (uv_tcp_t*)malloc(sizeof(uv_tcp_t));
+    if (connect == NULL) {
+        fprintf(stderr, "error with malloc for uv_tcp_t *connect\n");
+        return;
+    }
     if (uv_tcp_init(loop, connect)) {
         fprintf(stderr ,"error with uv_tcp_init, within cb_conn_tcp\n");
         return;
@@ -71,6 +92,11 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
      */
     if (nread > 0) {
         wrt = (write_req_t*)malloc(sizeof(write_req_t));
+        if (wrt == NULL) {
+            fprintf(stderr ,"error with malloc for write_req_t *wrt\n");
+            return;
+        }
+
         wrt->buf = uv_buf_init(buf->base, nread);
         char *msg = wrt->buf.base;
         int msgop = -1;
@@ -150,7 +176,11 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
                     if (userlist[i].stream != NULL) {
                         userlist[i].buf = uv_buf_init(msg, strlen(msg));
                         userlist[i].buf.base = (char *)malloc(strlen(msg) + 2);
-                        strncpy(userlist[i].buf.base, msg, strlen(msg));
+                        if (userlist[i].buf.base == NULL) {
+                            fprintf(stderr ,"error with malloc for userlist[i].buf.base\n");
+                            continue;
+                        }
+                        memcpy(userlist[i].buf.base, msg, strlen(msg));
                         strcat(userlist[i].buf.base, "\n");
                     }
                 }
@@ -204,6 +234,10 @@ void message_all(uv_timer_t *handle) {
     for (int i = 0; i < usercount; i++) {
         if (userlist[i].stream != NULL) {
             write_req_t *wrt_l = (write_req_t*)malloc(sizeof(write_req_t));
+            if (wrt_l == NULL) {
+                fprintf(stderr, "malloc failure for write_req_t *wrt_l\n");
+                continue;
+            }
             wrt_l->buf = uv_buf_init(userlist[i].buf.base, userlist[i].buf.len);
             send_message_no_prep(wrt_l, userlist[i].stream, &userlist[i].buf);
         }
@@ -225,7 +259,7 @@ void send_message_no_prep(write_req_t *wrt_l, uv_stream_t *s, uv_buf_t *msg) {
     uv_write((uv_write_t*)wrt_l, s, msg, 1, msg_write);
 }
 
-// stuff from libuv/docs/code/tcp-echo-server/main.c :
+// stuff from libuv/docs/code/tcp-echo-server/main.c (some slightly modified):
 void set_buffer(uv_handle_t *handle, size_t size, uv_buf_t *buf) {
     buf->base = calloc(size, sizeof(char*));
     buf->len = size;
@@ -236,6 +270,12 @@ void msg_write(uv_write_t *req, int status) {
         fprintf(stderr, "Write error %s\n", uv_strerror(status));
     }
     free_write_req(req);
+}
+
+void signal_handler(uv_signal_t *handle, int signum) {
+    fprintf(stdout, "Signal received: %d\n", signum);
+    uv_signal_stop(handle);
+    longjmp(jmp, 1);
 }
 
 void on_close(uv_handle_t* handle) {
@@ -253,4 +293,7 @@ void freeall() {
     free(wrt);
     free(uvstrm);
     free(bufmsg);
+    for (int i = 0; i < usercount; i++) {
+        free(userlist[i].buf.base);
+    }
 }
