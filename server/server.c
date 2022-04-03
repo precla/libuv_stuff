@@ -23,12 +23,6 @@ unsigned short usercount = 0;
 jmp_buf jmp;
 
 int main(int argc, char *argv[]) {
-    loop = (uv_loop_t*)malloc(sizeof(uv_loop_t));
-    if (loop == NULL) {
-        fprintf(stderr, "malloc failure for uv_loop_t loop\n");
-        return EXIT_FAILURE;
-    }
-
     loop = uv_default_loop();
     assert(loop != NULL);
 
@@ -301,7 +295,6 @@ void free_write_req(uv_write_t *req) {
 }
 
 void freeall() {
-    free(loop);
     free(wrt);
     free(uvstrm);
     for (int i = 0; i < usercount; i++) {
