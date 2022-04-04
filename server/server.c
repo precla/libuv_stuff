@@ -19,6 +19,7 @@ uv_buf_t *bufmsg;
 struct sockaddr_in addr;
 user userlist[MAX_USERS];
 unsigned short usercount = 0;
+unsigned short tcpconncount = 0;
 
 jmp_buf jmp;
 
@@ -63,18 +64,19 @@ void conn_tcp(uv_stream_t* s, int status) {
         fprintf(stderr, "error with setting up new connections %s\n", uv_strerror(status));
         return;
     }
-    tcpconn[usercount] = (uv_tcp_t*)malloc(sizeof(uv_tcp_t));
-    if (tcpconn[usercount] == NULL) {
+    tcpconn[tcpconncount] = (uv_tcp_t*)malloc(sizeof(uv_tcp_t));
+    if (tcpconn[tcpconncount] == NULL) {
         fprintf(stderr, "error with malloc for uv_tcp_t *tcpconn\n");
         return;
     }
-    if (uv_tcp_init(loop, tcpconn[usercount])) {
+    if (uv_tcp_init(loop, tcpconn[tcpconncount])) {
         fprintf(stderr ,"error with uv_tcp_init, within cb_conn_tcp\n");
         return;
     }
-    if (uv_accept(s, (uv_stream_t*)tcpconn[usercount]) == 0) {
-        uv_read_start((uv_stream_t*)tcpconn[usercount], set_buffer, read_msg);
+    if (uv_accept(s, (uv_stream_t*)tcpconn[tcpconncount]) == 0) {
+        uv_read_start((uv_stream_t*)tcpconn[tcpconncount], set_buffer, read_msg);
     }
+    tcpconncount++;
 }
 
 void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
@@ -299,7 +301,7 @@ void free_write_req(uv_write_t *req) {
 void freeall() {
     free(wrt);
     free(uvstrm);
-    for (int i = 0; i < usercount; i++) {
+    for (int i = 0; i < tcpconncount; i++) {
         free(tcpconn[i]);
     }
 }
