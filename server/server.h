@@ -27,7 +27,7 @@ typedef struct {
 } write_req_t;
 
 typedef struct {
-    char nick[NICK_LENGTH];
+    char nick[NICK_LENGTH+2];   // +2 for "\r\n"
     uv_stream_t *stream;
     uv_buf_t buf;
 } user;

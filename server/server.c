@@ -158,7 +158,8 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
                     }
                     // register new nick
                     if (msg) {
-                        strncpy(userlist[usercount].nick, msg, NICK_LENGTH);
+                        memcpy(userlist[usercount].nick, msg, NICK_LENGTH);
+                        strncat(userlist[usercount].nick, "\r", 2);
                         userlist[usercount].stream = client;
                         fprintf(stdout, "new nick registered: %s", userlist[usercount].nick);
                         uv_buf_t response = uv_buf_init("    nick registered\n", 20);
@@ -178,16 +179,17 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
             case ALL:
             case ALL_DELAY:
                 // send message to everyone
+                size_t msglen = strlen(msg);
                 for(int i = 0; i < usercount; i++) {
                     if (userlist[i].stream != NULL) {
-                        userlist[i].buf = uv_buf_init(msg, strlen(msg));
+                        userlist[i].buf = uv_buf_init(msg, msglen);
                         // +2 for new line characters '\r\n'
-                        userlist[i].buf.base = (char *)malloc(strlen(msg) + 2);
+                        userlist[i].buf.base = (char *)malloc(msglen + 2);
                         if (userlist[i].buf.base == NULL) {
                             fprintf(stderr ,"error with malloc for userlist[i].buf.base\n");
                             continue;
                         }
-                        memcpy(userlist[i].buf.base, msg, strlen(msg));
+                        memcpy(userlist[i].buf.base, msg, msglen);
                         strcat(userlist[i].buf.base, "\n");
                     }
                 }
