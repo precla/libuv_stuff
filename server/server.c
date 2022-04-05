@@ -49,6 +49,7 @@ int main(int argc, char *argv[]) {
     }
 
     fprintf(stdout, "Closing uvs...\n");
+    uv_signal_stop(&sig);
     uv_loop_close(loop);
     freeall();
     exit(EXIT_SUCCESS);
