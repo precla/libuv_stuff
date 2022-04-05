@@ -237,6 +237,7 @@ void read_msg(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
         uv_close((uv_handle_t*) client, on_close);
     }
 
+    free(wrt->buf.base);
     free(buf->base);
 }
 
