@@ -6,4 +6,4 @@ add_executable(npd npd.c npd_f.c npd_ipv4.c)
 
 # z -> zlib
 target_link_libraries(npd z)
-target_compile_options(npd PRIVATE -Wall)
+target_compile_options(npd PRIVATE -g -Wall)

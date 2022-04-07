@@ -41,10 +41,12 @@ int main(int argc, char *argv[]) {
     char destmac[MAC_LENGTH] = {0x0};
     char srcmac[MAC_LENGTH] = {0x0};
     char *ipv4packet = NULL;
+    /*
     uLong crcread = 0;
     uLong crccalc = 0;
+    */
     size_t l2packetsize = sizeof(packet_bytes);
-    size_t l3packetsize = l2packetsize - DATA_OFFSET - CRC_LENGTH;
+    size_t l3packetsize = l2packetsize - DATA_OFFSET;
 
     size_t predata = length_or_ethertype(packet_bytes + LENGTH_OR_ETHERTYPE_OFFSET);
 
@@ -76,7 +78,7 @@ int main(int argc, char *argv[]) {
 
     mac_address(packet_bytes, destmac);
     mac_address(packet_bytes + MAC_LENGTH, srcmac);
-    crcread = crc_within_packet(packet_bytes + l2packetsize - CRC_LENGTH);
+    // crcread = crc_within_packet(packet_bytes + l2packetsize - CRC_LENGTH);
 
     // print all the data of the package:
     printf("%20s\t", "Dest. MAC:");
@@ -85,14 +87,20 @@ int main(int argc, char *argv[]) {
     printf("\n%20s\t", "Source MAC:");
     print_mac_address(srcmac);
 
-    printf("\n%20s\t0x%.8zx", "read CRC:", crcread);
-    // TODO: CRC Mismatch!?
+    /*
+     * TODO: CRC Mismatch!? How does one calculate the eth. frame crc?
+     * does this packet_bytes contain crc for the eth.frame?
+     *
+     * http://packetor.com/ says 81 bytes for this IPv4 packet
+     *
+    printf("\n%20s\t0x%.8zx", "read eth. frame CRC:", crcread);
     printf("\n%20s\t0x%.8zx", "calculated CRC:", crc32_z(crccalc, (const Bytef *)packet_bytes, l2packetsize - CRC_LENGTH));
     if (crccalc != crcread) {
         printf("\n%20s\t%s\n", "CRC:", "Mismatch!");
     } else {
         printf("\n%20s\t%s\n", "CRC:", "Match!");
     }
+    */
 
     if (predata >= 1536) {
         print_ipv4_data(ipv4packet, l3packetsize);
